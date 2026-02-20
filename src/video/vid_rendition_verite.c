@@ -48,6 +48,19 @@ static uint8_t verite_in(uint16_t addr, void *priv);
 static void verite_updatemapping(verite_t *dev);
 
 static void
+verite_io_set(verite_t *dev)
+{
+    io_removehandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
+    io_sethandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
+}
+
+static void
+verite_io_remove(verite_t *dev)
+{
+    io_removehandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
+}
+
+static void
 verite_risc_reset(verite_t *dev)
 {
     memset(&dev->risc, 0, sizeof(dev->risc));
@@ -103,11 +116,11 @@ verite_pci_read(int func, int addr, int len, void *priv)
         case 0x03:
             ret = (VERITE_DEVICE_ID >> 8) & 0xff;
             break;
-        case 0x04:
-            ret = dev->pci_regs[0x04];
+        case PCI_REG_COMMAND:
+            ret = dev->pci_regs[PCI_REG_COMMAND];
             break;
-        case 0x05:
-            ret = dev->pci_regs[0x05];
+        case PCI_REG_COMMAND_H:
+            ret = dev->pci_regs[PCI_REG_COMMAND_H];
             break;
         case 0x06:
             ret = dev->pci_regs[0x06];
@@ -192,12 +205,12 @@ verite_pci_write(int func, int addr, int len, uint8_t val, void *priv)
     (void) len;
 
     switch (addr) {
-        case 0x04:
-            dev->pci_regs[0x04] = val & 0x27;
+        case PCI_REG_COMMAND:
+            dev->pci_regs[PCI_REG_COMMAND] = val & 0x27;
             verite_updatemapping(dev);
             break;
-        case 0x05:
-            dev->pci_regs[0x05] = val & 0x03;
+        case PCI_REG_COMMAND_H:
+            dev->pci_regs[PCI_REG_COMMAND_H] = val & 0x03;
             break;
         case 0x06:
             dev->pci_regs[0x06] = val & 0xf0;
@@ -262,18 +275,16 @@ verite_updatemapping(verite_t *dev)
 
     mem_mapping_disable(&dev->linear_mapping);
 
-    if (dev->pci_regs[0x04] & PCI_COMMAND_MEM) {
+    if (dev->pci_regs[PCI_REG_COMMAND] & PCI_COMMAND_MEM) {
         if (dev->mem_base) {
             mem_mapping_set_addr(&dev->linear_mapping, dev->mem_base, VERITE_VRAM_SIZE);
-            mem_mapping_enable(&dev->linear_mapping);
         }
     }
 
-    if (dev->pci_regs[0x04] & PCI_COMMAND_IO) {
-        io_removehandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
-        io_sethandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
+    if (dev->pci_regs[PCI_REG_COMMAND] & PCI_COMMAND_IO) {
+        verite_io_set(dev);
     } else {
-        io_removehandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
+        verite_io_remove(dev);
     }
 
     if (dev->in_vga_mode) {
@@ -450,12 +461,13 @@ verite_init(const device_t *info)
                     verite_read_linear, verite_readw_linear, verite_readl_linear,
                     verite_write_linear, verite_writew_linear, verite_writel_linear,
                     NULL, MEM_MAPPING_EXTERNAL, dev);
-
-    io_sethandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
+    mem_mapping_disable(&dev->linear_mapping);
 
     dev->pci_regs[PCI_REG_COMMAND] = PCI_COMMAND_IO | PCI_COMMAND_MEM;
 
     pci_add_card(PCI_ADD_NORMAL, verite_pci_read, verite_pci_write, dev, &dev->pci_slot);
+
+    verite_io_set(dev);
 
     verite_risc_init(dev);
 
