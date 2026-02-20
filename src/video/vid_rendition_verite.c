@@ -132,7 +132,7 @@ verite_pci_read(int func, int addr, int len, void *priv)
         case 0x01: return 0x11;
         case 0x02: return 0x01;
         case 0x03: return 0x00;
-        case PCI_REG_COMMAND: return dev->pci_regs[PCI_REG_COMMAND];
+        case PCI_REG_COMMAND: return dev->pci_regs[PCI_REG_COMMAND] | 0x80;
         case 0x07: return 0x02;
         case 0x08: return 0x00;
         case 0x09: return 0x00;
@@ -142,7 +142,7 @@ verite_pci_read(int func, int addr, int len, void *priv)
         case 0x11: return 0x00;
         case 0x12: return dev->linear_base >> 16;
         case 0x13: return dev->linear_base >> 24;
-        case 0x30: return dev->pci_regs[0x30];
+        case 0x30: return dev->pci_regs[0x30] & 0x01;
         case 0x31: return 0x00;
         case 0x32: return dev->pci_regs[0x32];
         case 0x33: return dev->pci_regs[0x33];
@@ -234,6 +234,7 @@ verite_init(const device_t *info)
     dev->modereg = 0x02;
 
     rom_init(&dev->bios_rom, ROM_SCREAMIN3D, 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
+    mem_mapping_disable(&dev->bios_rom.mapping);
 
     video_inform(VIDEO_FLAG_TYPE_SPECIAL, &timing_verite);
 
@@ -259,7 +260,7 @@ verite_init(const device_t *info)
 
     pci_add_card(PCI_ADD_NORMAL, verite_pci_read, verite_pci_write, dev, &dev->pci_slot);
 
-    dev->pci_regs[PCI_REG_COMMAND] = 0x03;
+    dev->pci_regs[PCI_REG_COMMAND] = 0x83;
     dev->pci_regs[0x30] = 0x00;
     dev->pci_regs[0x32] = 0x0c;
     dev->pci_regs[0x33] = 0x00;
