@@ -157,6 +157,10 @@ verite_init(const device_t *info)
 
     svga_init(info, &dev->svga, dev, 4 << 20, verite_recalctimings, verite_in, verite_out, NULL, NULL);
 
+    dev->svga.packed_chain4 = 1;
+    dev->svga.miscout = 1;
+    dev->svga.bpp = 8;
+
     mem_mapping_add(&dev->linear_mapping, 0, 0, svga_read_linear, svga_readw_linear, svga_readl_linear, svga_write_linear, svga_writew_linear, svga_writel_linear, NULL, MEM_MAPPING_EXTERNAL, &dev->svga);
     mem_mapping_disable(&dev->linear_mapping);
 
@@ -164,10 +168,12 @@ verite_init(const device_t *info)
 
     pci_add_card(PCI_ADD_NORMAL, verite_pci_read, verite_pci_write, dev, &dev->pci_slot);
 
-    dev->pci_regs[PCI_REG_COMMAND] = 0x83;
+    dev->pci_regs[PCI_REG_COMMAND] = 0x03;
     dev->pci_regs[0x30] = 0x00;
     dev->pci_regs[0x32] = 0x0c;
     dev->pci_regs[0x33] = 0x00;
+
+    svga_recalctimings(&dev->svga);
 
     return dev;
 }
