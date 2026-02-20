@@ -64,7 +64,7 @@ verite_pci_read(int func, int addr, int len, void *priv)
         case 0x11: return 0x00;
         case 0x12: return dev->linear_base >> 16;
         case 0x13: return dev->linear_base >> 24;
-        case 0x30: return dev->pci_regs[0x30] & 0x01;
+        case 0x30: return dev->pci_regs[0x30];
         case 0x31: return 0x00;
         case 0x32: return dev->pci_regs[0x32];
         case 0x33: return dev->pci_regs[0x33];
@@ -152,7 +152,6 @@ verite_init(const device_t *info)
     memset(dev, 0, sizeof(verite_t));
 
     rom_init(&dev->bios_rom, ROM_SCREAMIN3D, 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
-    mem_mapping_disable(&dev->bios_rom.mapping);
 
     video_inform(VIDEO_FLAG_TYPE_SPECIAL, &timing_verite);
 
