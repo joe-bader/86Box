@@ -51,9 +51,9 @@ static void verite_update_rom_mapping(verite_t *dev);
 static void
 verite_update_rom_mapping(verite_t *dev)
 {
-    uint32_t bios_addr = (dev->pci_regs[0x32] << 16) | (dev->pci_regs[0x33] << 24);
-    if ((dev->pci_regs[0x30] & 0x01) && bios_addr) {
-        mem_mapping_set_addr(&dev->bios_rom.mapping, bios_addr, 0x8000);
+    if (dev->pci_regs[0x30] & 0x01) {
+        uint32_t biosaddr = (dev->pci_regs[0x32] << 16) | (dev->pci_regs[0x33] << 24);
+        mem_mapping_set_addr(&dev->bios_rom.mapping, biosaddr, 0x8000);
     } else {
         mem_mapping_disable(&dev->bios_rom.mapping);
     }
@@ -252,17 +252,9 @@ verite_pci_write(int func, int addr, int len, uint8_t val, void *priv)
             verite_updatemapping(dev);
             break;
         case 0x30:
-            dev->pci_regs[0x30] = val & 0x01;
-            verite_update_rom_mapping(dev);
-            break;
-        case 0x31:
-            break;
         case 0x32:
-            dev->pci_regs[0x32] = val;
-            verite_update_rom_mapping(dev);
-            break;
         case 0x33:
-            dev->pci_regs[0x33] = val;
+            dev->pci_regs[addr] = val;
             verite_update_rom_mapping(dev);
             break;
         case 0x3c:
@@ -363,8 +355,6 @@ verite_recalctimings(svga_t *svga)
     if (!dev->in_vga_mode) {
         return;
     }
-
-    bt48x_recalctimings(dev->ramdac, svga);
 }
 
 static uint8_t
@@ -461,7 +451,8 @@ verite_init(const device_t *info)
 
     dev->ramdac = device_add(&bt485_ramdac_device);
     dev->svga.ramdac = dev->ramdac;
-    dev->svga.dac_hwcursor_draw = bt48x_hwcursor_draw;
+
+    dev->svga.force_old_addr = 1;
 
     mem_mapping_add(&dev->linear_mapping, 0, 0,
                     verite_read_linear, verite_readw_linear, verite_readl_linear,
@@ -482,6 +473,8 @@ verite_init(const device_t *info)
     verite_risc_init(dev);
 
     video_inform(VIDEO_FLAG_TYPE_SPECIAL, &timing_verite);
+
+    svga_recalctimings(&dev->svga);
 
     return dev;
 }
