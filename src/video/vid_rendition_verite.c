@@ -17,14 +17,19 @@
 
 #define ROM_SCREAMIN3D "roms/video/v1000/can76.rom"
 
+#define VERITE_VRAM_SIZE (4 << 20)
+
 typedef struct verite_t {
     svga_t        svga;
     rom_t         bios_rom;
     mem_mapping_t linear_mapping;
+    mem_mapping_t mmio_mapping;
     uint8_t       pci_regs[256];
     uint8_t       pci_slot;
     uint8_t       int_line;
     uint32_t      linear_base;
+    uint8_t       modereg;
+    uint8_t       debugreg;
 } verite_t;
 
 static video_timings_t timing_verite = {
@@ -40,6 +45,79 @@ static video_timings_t timing_verite = {
 static void verite_out(uint16_t addr, uint8_t val, void *priv);
 static uint8_t verite_in(uint16_t addr, void *priv);
 static void verite_recalcmapping(verite_t *dev);
+
+static uint8_t
+verite_mmio_read(uint32_t addr, void *priv)
+{
+    verite_t *dev = (verite_t *) priv;
+    uint8_t ret = 0;
+
+    addr &= 0xfff;
+
+    switch (addr) {
+        case 0x72:
+            ret = dev->modereg;
+            break;
+        case 0x48:
+            ret = dev->debugreg;
+            break;
+        default:
+            break;
+    }
+
+    return ret;
+}
+
+static void
+verite_mmio_write(uint32_t addr, uint8_t val, void *priv)
+{
+    verite_t *dev = (verite_t *) priv;
+
+    addr &= 0xfff;
+
+    switch (addr) {
+        case 0x48:
+            dev->debugreg = val;
+            if (val & 0x01) {
+                dev->modereg = 0x02;
+            }
+            break;
+        case 0x72:
+            dev->modereg = val;
+            break;
+        default:
+            break;
+    }
+}
+
+static uint8_t
+verite_mmio_read_w(uint32_t addr, void *priv)
+{
+    return verite_mmio_read(addr, priv) | (verite_mmio_read(addr + 1, priv) << 8);
+}
+
+static uint8_t
+verite_mmio_read_l(uint32_t addr, void *priv)
+{
+    return verite_mmio_read(addr, priv) | (verite_mmio_read(addr + 1, priv) << 8) |
+           (verite_mmio_read(addr + 2, priv) << 16) | (verite_mmio_read(addr + 3, priv) << 24);
+}
+
+static void
+verite_mmio_write_w(uint32_t addr, uint16_t val, void *priv)
+{
+    verite_mmio_write(addr, val & 0xff, priv);
+    verite_mmio_write(addr + 1, (val >> 8) & 0xff, priv);
+}
+
+static void
+verite_mmio_write_l(uint32_t addr, uint32_t val, void *priv)
+{
+    verite_mmio_write(addr, val & 0xff, priv);
+    verite_mmio_write(addr + 1, (val >> 8) & 0xff, priv);
+    verite_mmio_write(addr + 2, (val >> 16) & 0xff, priv);
+    verite_mmio_write(addr + 3, (val >> 24) & 0xff, priv);
+}
 
 static uint8_t
 verite_pci_read(int func, int addr, int len, void *priv)
@@ -118,10 +196,12 @@ static void
 verite_recalcmapping(verite_t *dev)
 {
     mem_mapping_disable(&dev->linear_mapping);
+    mem_mapping_disable(&dev->mmio_mapping);
 
     if (dev->pci_regs[PCI_REG_COMMAND] & PCI_COMMAND_MEM) {
         if (dev->linear_base) {
-            mem_mapping_set_addr(&dev->linear_mapping, dev->linear_base, 4 << 20);
+            mem_mapping_set_addr(&dev->mmio_mapping, dev->linear_base, 0x1000);
+            mem_mapping_set_addr(&dev->linear_mapping, dev->linear_base + 0x1000, VERITE_VRAM_SIZE - 0x1000);
         }
     }
 }
@@ -151,17 +231,28 @@ verite_init(const device_t *info)
     verite_t *dev = malloc(sizeof(verite_t));
     memset(dev, 0, sizeof(verite_t));
 
+    dev->modereg = 0x02;
+
     rom_init(&dev->bios_rom, ROM_SCREAMIN3D, 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
 
     video_inform(VIDEO_FLAG_TYPE_SPECIAL, &timing_verite);
 
-    svga_init(info, &dev->svga, dev, 4 << 20, verite_recalctimings, verite_in, verite_out, NULL, NULL);
+    svga_init(info, &dev->svga, dev, VERITE_VRAM_SIZE, verite_recalctimings, verite_in, verite_out, NULL, NULL);
 
     dev->svga.packed_chain4 = 1;
     dev->svga.miscout = 1;
     dev->svga.bpp = 8;
 
-    mem_mapping_add(&dev->linear_mapping, 0, 0, svga_read_linear, svga_readw_linear, svga_readl_linear, svga_write_linear, svga_writew_linear, svga_writel_linear, NULL, MEM_MAPPING_EXTERNAL, &dev->svga);
+    mem_mapping_add(&dev->mmio_mapping, 0, 0,
+                    verite_mmio_read, verite_mmio_read_w, verite_mmio_read_l,
+                    verite_mmio_write, verite_mmio_write_w, verite_mmio_write_l,
+                    NULL, MEM_MAPPING_EXTERNAL, dev);
+    mem_mapping_disable(&dev->mmio_mapping);
+
+    mem_mapping_add(&dev->linear_mapping, 0, 0,
+                    svga_read_linear, svga_readw_linear, svga_readl_linear,
+                    svga_write_linear, svga_writew_linear, svga_writel_linear,
+                    NULL, MEM_MAPPING_EXTERNAL, &dev->svga);
     mem_mapping_disable(&dev->linear_mapping);
 
     io_sethandler(0x03c0, 0x0020, verite_in, NULL, NULL, verite_out, NULL, NULL, dev);
