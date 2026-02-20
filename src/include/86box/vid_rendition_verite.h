@@ -177,7 +177,6 @@ typedef struct verite_t {
     uint32_t device0;
     uint32_t device1;
     
-    uint8_t *vram;
     uint32_t vram_mask;
     int      vram_size;
     
