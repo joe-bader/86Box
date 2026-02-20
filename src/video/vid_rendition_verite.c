@@ -46,6 +46,18 @@ static void verite_recalctimings(svga_t *svga);
 static void verite_out(uint16_t addr, uint8_t val, void *priv);
 static uint8_t verite_in(uint16_t addr, void *priv);
 static void verite_updatemapping(verite_t *dev);
+static void verite_update_rom_mapping(verite_t *dev);
+
+static void
+verite_update_rom_mapping(verite_t *dev)
+{
+    uint32_t bios_addr = (dev->pci_regs[0x32] << 16) | (dev->pci_regs[0x33] << 24);
+    if ((dev->pci_regs[0x30] & 0x01) && bios_addr) {
+        mem_mapping_set_addr(&dev->bios_rom.mapping, bios_addr, 0x8000);
+    } else {
+        mem_mapping_disable(&dev->bios_rom.mapping);
+    }
+}
 
 static void
 verite_io_set(verite_t *dev)
@@ -171,10 +183,10 @@ verite_pci_read(int func, int addr, int len, void *priv)
             ret = 0x00;
             break;
         case 0x30:
-            ret = dev->pci_regs[0x30];
+            ret = dev->pci_regs[0x30] & 0x01;
             break;
         case 0x31:
-            ret = dev->pci_regs[0x31];
+            ret = 0x00;
             break;
         case 0x32:
             ret = dev->pci_regs[0x32];
@@ -231,34 +243,27 @@ verite_pci_write(int func, int addr, int len, uint8_t val, void *priv)
             if (addr == 0x10)
                 dev->mem_base = (dev->mem_base & 0xffffff00) | (val & 0x00);
             else if (addr == 0x11)
-                dev->mem_base = (dev->mem_base & 0xffff00ff) | ((val & 0xfc) << 8);
+                dev->mem_base = (dev->mem_base & 0xffff00ff) | ((val & 0x00) << 8);
             else if (addr == 0x12)
-                dev->mem_base = (dev->mem_base & 0xff00ffff) | (val << 16);
+                dev->mem_base = (dev->mem_base & 0xff00ffff) | ((val & 0xc0) << 16);
             else if (addr == 0x13)
                 dev->mem_base = (dev->mem_base & 0x00ffffff) | (val << 24);
-            dev->mem_base &= 0xfc000000;
+            dev->mem_base &= 0xffc00000;
             verite_updatemapping(dev);
             break;
         case 0x30:
+            dev->pci_regs[0x30] = val & 0x01;
+            verite_update_rom_mapping(dev);
+            break;
         case 0x31:
+            break;
         case 0x32:
+            dev->pci_regs[0x32] = val;
+            verite_update_rom_mapping(dev);
+            break;
         case 0x33:
-            if (addr == 0x30)
-                dev->pci_regs[0x30] = val & 0x01;
-            else if (addr == 0x31)
-                dev->pci_regs[0x31] = val & 0xfc;
-            else if (addr == 0x32)
-                dev->pci_regs[0x32] = val;
-            else if (addr == 0x33)
-                dev->pci_regs[0x33] = val;
-            {
-                uint32_t bios_addr = (dev->pci_regs[0x31] << 8) | (dev->pci_regs[0x32] << 16) | (dev->pci_regs[0x33] << 24);
-                if (dev->pci_regs[0x30] & 0x01) {
-                    mem_mapping_set_addr(&dev->bios_rom.mapping, bios_addr, 0x8000);
-                } else {
-                    mem_mapping_disable(&dev->bios_rom.mapping);
-                }
-            }
+            dev->pci_regs[0x33] = val;
+            verite_update_rom_mapping(dev);
             break;
         case 0x3c:
             dev->int_line = val;
@@ -442,6 +447,7 @@ verite_init(const device_t *info)
     dev->in_vga_mode = 1;
 
     rom_init(&dev->bios_rom, ROM_SCREAMIN3D, 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
+    mem_mapping_disable(&dev->bios_rom.mapping);
 
     svga_init(info, &dev->svga, dev, dev->vram_size,
               verite_recalctimings, verite_in, verite_out,
@@ -464,6 +470,10 @@ verite_init(const device_t *info)
     mem_mapping_disable(&dev->linear_mapping);
 
     dev->pci_regs[PCI_REG_COMMAND] = PCI_COMMAND_IO | PCI_COMMAND_MEM;
+
+    dev->pci_regs[0x30] = 0x00;
+    dev->pci_regs[0x32] = 0x0c;
+    dev->pci_regs[0x33] = 0x00;
 
     pci_add_card(PCI_ADD_NORMAL, verite_pci_read, verite_pci_write, dev, &dev->pci_slot);
 
