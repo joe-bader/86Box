@@ -268,8 +268,6 @@ verite_pci_write(int func, int addr, int len, uint8_t val, void *priv)
 static void
 verite_updatemapping(verite_t *dev)
 {
-    svga_t *svga = &dev->svga;
-
     mem_mapping_disable(&dev->linear_mapping);
 
     if (dev->pci_regs[PCI_REG_COMMAND] & PCI_COMMAND_MEM) {
@@ -283,147 +281,27 @@ verite_updatemapping(verite_t *dev)
     } else {
         verite_io_remove(dev);
     }
-
-    if (dev->in_vga_mode) {
-        mem_mapping_enable(&svga->mapping);
-    } else {
-        mem_mapping_disable(&svga->mapping);
-    }
 }
 
 static void
 verite_out(uint16_t addr, uint8_t val, void *priv)
 {
     verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
 
-    if (!dev->in_vga_mode) {
-        if (addr >= 0x3c0 && addr < 0x3e0) {
-            if ((addr >= 0x3c8) && (addr <= 0x3cf)) {
-                switch (addr) {
-                    case 0x3c8:
-                        svga->dac_addr = val;
-                        svga->dac_pos = 0;
-                        break;
-                    case 0x3c9:
-                        bt48x_ramdac_out(addr - 0x3c0, 0, 0, val, dev->ramdac, svga);
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-        return;
-    }
-
-    svga_out(addr, val, svga);
+    svga_out(addr, val, &dev->svga);
 }
 
 static uint8_t
 verite_in(uint16_t addr, void *priv)
 {
     verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
-    uint8_t   ret = 0xff;
 
-    if (!dev->in_vga_mode) {
-        if (addr >= 0x3c0 && addr < 0x3e0) {
-            if ((addr >= 0x3c8) && (addr <= 0x3cf)) {
-                switch (addr) {
-                    case 0x3c8:
-                        ret = svga->dac_addr;
-                        break;
-                    case 0x3c9:
-                        ret = bt48x_ramdac_in(addr - 0x3c0, 0, 0, dev->ramdac, svga);
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-        return ret;
-    }
-
-    return svga_in(addr, svga);
+    return svga_in(addr, &dev->svga);
 }
 
 static void
 verite_recalctimings(svga_t *svga)
 {
-    verite_t *dev = (verite_t *) svga->priv;
-
-    if (!dev->in_vga_mode) {
-        return;
-    }
-}
-
-static uint8_t
-verite_read_linear(uint32_t addr, void *priv)
-{
-    verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
-
-    addr &= svga->vram_mask;
-
-    return svga->vram[addr];
-}
-
-static uint16_t
-verite_readw_linear(uint32_t addr, void *priv)
-{
-    verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
-
-    addr &= svga->vram_mask;
-
-    return *(uint16_t *) &svga->vram[addr];
-}
-
-static uint32_t
-verite_readl_linear(uint32_t addr, void *priv)
-{
-    verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
-
-    addr &= svga->vram_mask;
-
-    return *(uint32_t *) &svga->vram[addr];
-}
-
-static void
-verite_write_linear(uint32_t addr, uint8_t val, void *priv)
-{
-    verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
-
-    addr &= svga->vram_mask;
-
-    svga->vram[addr] = val;
-    svga->changedvram[addr >> 12] = changeframecount;
-}
-
-static void
-verite_writew_linear(uint32_t addr, uint16_t val, void *priv)
-{
-    verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
-
-    addr &= svga->vram_mask;
-
-    *(uint16_t *) &svga->vram[addr] = val;
-    svga->changedvram[addr >> 12] = changeframecount;
-}
-
-static void
-verite_writel_linear(uint32_t addr, uint32_t val, void *priv)
-{
-    verite_t *dev = (verite_t *) priv;
-    svga_t   *svga = &dev->svga;
-
-    addr &= svga->vram_mask;
-
-    *(uint32_t *) &svga->vram[addr] = val;
-    svga->changedvram[addr >> 12] = changeframecount;
 }
 
 static void *
@@ -434,7 +312,6 @@ verite_init(const device_t *info)
 
     dev->vram_size = VERITE_VRAM_SIZE;
     dev->vram_mask = dev->vram_size - 1;
-    dev->in_vga_mode = 1;
 
     rom_init(&dev->bios_rom, ROM_SCREAMIN3D, 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
     mem_mapping_disable(&dev->bios_rom.mapping);
@@ -448,16 +325,12 @@ verite_init(const device_t *info)
     dev->svga.vram_max = dev->vram_size;
     dev->svga.miscout = 1;
     dev->svga.bpp = 8;
-
-    dev->ramdac = device_add(&bt485_ramdac_device);
-    dev->svga.ramdac = dev->ramdac;
-
     dev->svga.force_old_addr = 1;
 
     mem_mapping_add(&dev->linear_mapping, 0, 0,
-                    verite_read_linear, verite_readw_linear, verite_readl_linear,
-                    verite_write_linear, verite_writew_linear, verite_writel_linear,
-                    NULL, MEM_MAPPING_EXTERNAL, dev);
+                    svga_read_linear, svga_readw_linear, svga_readl_linear,
+                    svga_write_linear, svga_writew_linear, svga_writel_linear,
+                    NULL, MEM_MAPPING_EXTERNAL, &dev->svga);
     mem_mapping_disable(&dev->linear_mapping);
 
     dev->pci_regs[PCI_REG_COMMAND] = PCI_COMMAND_IO | PCI_COMMAND_MEM;
@@ -473,8 +346,6 @@ verite_init(const device_t *info)
     verite_risc_init(dev);
 
     video_inform(VIDEO_FLAG_TYPE_SPECIAL, &timing_verite);
-
-    svga_recalctimings(&dev->svga);
 
     return dev;
 }

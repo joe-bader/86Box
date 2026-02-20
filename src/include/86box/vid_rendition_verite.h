@@ -180,11 +180,7 @@ typedef struct verite_t {
     uint32_t vram_mask;
     int      vram_size;
     
-    void *ramdac;
-    
     verite_risc_t risc;
-    
-    int in_vga_mode;
 } verite_t;
 
 extern const device_t screamin3d_device;
