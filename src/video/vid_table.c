@@ -183,6 +183,7 @@ video_cards[] = {
     { .device = &et4000w32p_cardex_revd_vlb_device,             .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &et4000w32p_diamond_revd_vlb_device,            .flags = VIDEO_FLAG_TYPE_NONE },
     /* PCI */
+    { .device = &screamin3d_device,                             .flags = VIDEO_FLAG_TYPE_SPECIAL },
     { .device = &voodoo_banshee_device,                         .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &voodoo_3_1000_device,                          .flags = VIDEO_FLAG_TYPE_NONE },
     { .device = &voodoo_3_2000_device,                          .flags = VIDEO_FLAG_TYPE_NONE },

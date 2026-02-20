@@ -139,6 +139,9 @@ add_library(vid OBJECT
     # Matrox
     vid_mga.c
 
+    # Rendition Verite
+    vid_rendition_verite.c
+
     # NVidia (pending)
     nv/nv_rivatimer.c
 

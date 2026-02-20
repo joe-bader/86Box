@@ -624,6 +624,9 @@ extern const device_t vga_device;
 extern const device_t ps1vga_device;
 extern const device_t ps1vga_mca_device;
 
+/* Rendition Verite V1000 */
+extern const device_t screamin3d_device;
+
 /* 3DFX Voodoo Graphics */
 extern const device_t voodoo_device;
 extern const device_t voodoo_banshee_device;
