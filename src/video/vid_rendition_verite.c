@@ -90,13 +90,13 @@ verite_mmio_write(uint32_t addr, uint8_t val, void *priv)
     }
 }
 
-static uint8_t
+static uint16_t
 verite_mmio_read_w(uint32_t addr, void *priv)
 {
     return verite_mmio_read(addr, priv) | (verite_mmio_read(addr + 1, priv) << 8);
 }
 
-static uint8_t
+static uint32_t
 verite_mmio_read_l(uint32_t addr, void *priv)
 {
     return verite_mmio_read(addr, priv) | (verite_mmio_read(addr + 1, priv) << 8) |
