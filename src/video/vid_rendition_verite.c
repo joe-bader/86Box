@@ -82,10 +82,13 @@ verite_risc_init(verite_t *dev)
 }
 
 static uint8_t
-verite_pci_read(UNUSED(int func), int addr, UNUSED(int len), void *priv)
+verite_pci_read(int func, int addr, int len, void *priv)
 {
     verite_t *dev = (verite_t *) priv;
     uint8_t   ret = 0;
+
+    (void) func;
+    (void) len;
 
     switch (addr) {
         case 0x00:
@@ -181,9 +184,12 @@ verite_pci_read(UNUSED(int func), int addr, UNUSED(int len), void *priv)
 }
 
 static void
-verite_pci_write(UNUSED(int func), int addr, UNUSED(int len), uint8_t val, void *priv)
+verite_pci_write(int func, int addr, int len, uint8_t val, void *priv)
 {
     verite_t *dev = (verite_t *) priv;
+
+    (void) func;
+    (void) len;
 
     switch (addr) {
         case 0x04:
